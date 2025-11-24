@@ -1,0 +1,29 @@
+.custom-leaflet-icon {
+    background: transparent !important;
+    border: none !important;
+}
+
+.custom-scrollbar-content {
+    overflow-y: auto !important; /* Força a barra a aparecer se necessário */
+    scrollbar-width: thin; /* Firefox */
+    scrollbar-color: #6200EA #f1f1f1; /* Firefox */
+}
+
+/* Estilização da Barra (Chrome, Edge, Safari) */
+.custom-scrollbar-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.custom-scrollbar-content::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.custom-scrollbar-content::-webkit-scrollbar-thumb {
+    background: #6200EA;
+    border-radius: 4px;
+}
+
+.custom-scrollbar-content::-webkit-scrollbar-thumb:hover {
+    background: #5600cc;
+}
