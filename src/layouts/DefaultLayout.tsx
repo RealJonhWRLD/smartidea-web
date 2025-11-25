@@ -41,7 +41,7 @@ export function DefaultLayout() {
                                     if(item === 'Mapas') navigate('/maps');
                                     if(item === 'Imóveis') navigate('/properties'); // <--- ADICIONADO!
                                     if(item === 'Funcionários') navigate('/employees');
-
+                                    if(item === 'Relatórios') navigate('/reports');
                                     // Futuramente:
                                     // if(item === 'Financeiro') navigate('/finance');
                                 }}
@@ -108,6 +108,8 @@ export function DefaultLayout() {
                     overflow: location.pathname === '/maps' ? 'hidden' : 'auto'
                 }}
             >
+
+
                 <Outlet />
             </Box>
         </Box>

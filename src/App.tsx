@@ -6,6 +6,7 @@ import { Employees } from './pages/Employees';
 import { RealEstateMap } from './pages/RealEstateMap';
 import './index.css';
 import { Properties } from './pages/Properties';
+import {Reports} from "./pages/Reports.tsx";
 
 function App() {
     return (
@@ -18,6 +19,7 @@ function App() {
                     <Route path="/employees" element={<Employees />} />
                     <Route path="/maps" element={<RealEstateMap />} />
                     <Route path="/properties" element={<Properties />} />
+                    <Route path="/reports" element={<Reports />} />
                     <Route path="/tasks" element={<h2>Aqui vai o Kanban</h2>} />
                 </Route>
             </Routes>

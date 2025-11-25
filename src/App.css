@@ -27,3 +27,22 @@
 .custom-scrollbar-content::-webkit-scrollbar-thumb:hover {
     background: #5600cc;
 }
+
+/* Usa o wrapper do Leaflet como o ÚNICO card branco */
+.leaflet-popup.custom-popup .leaflet-popup-content-wrapper {
+    padding: 16px 18px !important;             /* espaço interno do card */
+    margin: 0 !important;
+    background: #ffffff !important;
+    box-shadow: 0 10px 28px rgba(0,0,0,0.18) !important;
+    border-radius: 22px !important;
+}
+
+/* remove margem interna extra */
+.leaflet-popup.custom-popup .leaflet-popup-content {
+    margin: 0 !important;
+}
+
+/* remove a setinha */
+.leaflet-popup.custom-popup .leaflet-popup-tip {
+    display: none !important;
+}
