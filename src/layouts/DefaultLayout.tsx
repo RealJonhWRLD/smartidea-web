@@ -39,9 +39,10 @@ export function DefaultLayout() {
                                 onClick={() => {
                                     // 👇 AQUI ESTÁ A LÓGICA DE NAVEGAÇÃO
                                     if(item === 'Mapas') navigate('/maps');
-                                    if(item === 'Imóveis') navigate('/properties'); // <--- ADICIONADO!
+                                    if(item === 'Imóveis') navigate('/properties');
                                     if(item === 'Funcionários') navigate('/employees');
                                     if(item === 'Relatórios') navigate('/reports');
+                                    if (item === 'Inquilinos') navigate('/tenants');
                                     // Futuramente:
                                     // if(item === 'Financeiro') navigate('/finance');
                                 }}

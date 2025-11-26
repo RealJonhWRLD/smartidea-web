@@ -28,6 +28,22 @@ export interface Property {
     createdAt?: string;
     updatedAt?: string;
 
+    tenantType?: 'PF' | 'PJ';
+
+    tenantCpf?: string;
+    tenantRg?: string;
+    tenantEmail?: string;
+    tenantPhone2?: string;
+    tenantSocial?: string;
+    tenantBirthDate?: string;
+    tenantMaritalStatus?: string;
+    tenantProfession?: string;
+
+    companyName?: string;
+    companyCnpj?: string;
+    legalRepName?: string;
+    legalRepCpf?: string;
+
     // opcional: endereço formatado pra mostrar no card
     address?: string;
 }
