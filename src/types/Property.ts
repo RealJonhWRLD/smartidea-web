@@ -47,3 +47,38 @@ export interface Property {
     // opcional: endereço formatado pra mostrar no card
     address?: string;
 }
+    // =====================
+// NOVOS DTOS PARA /api/properties
+// =====================
+
+    /**
+     * Resposta de GET /api/properties
+     * Usado apenas na tela de Imóveis / Inquilinos (Tenants.tsx)
+     */
+    export interface PropertyListItemDTO {
+        id: string;
+        name: string;
+        description: string | null;
+        propertyType: string | null;
+        status: 'ALUGADO' | 'DISPONIVEL';
+        currentTenant: string | null;
+        currentContractStartDate: string | null;
+        currentContractEndDate: string | null;
+        lat: number;
+        lng: number;
+    }
+
+/**
+ * Resposta de GET /api/properties/{id}
+ * Detalhes fixos do imóvel (sem contrato)
+ */
+export interface PropertyDetailsDTO {
+    id: string;
+    name: string;
+    propertyType: string | null;
+    description: string | null;
+    notes: string | null;
+    lat: number;
+    lng: number;
+
+}

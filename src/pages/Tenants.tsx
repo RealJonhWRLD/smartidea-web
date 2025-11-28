@@ -1,447 +1,392 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import {
     Box,
-    Typography,
-    Paper,
-    TextField,
-    InputAdornment,
+    Card,
+    Chip,
+    Divider,
     List,
     ListItemButton,
     ListItemText,
-    ListSubheader,
-    Chip,
-    Divider,
+    Stack,
+    TextField,
+    Typography,
     CircularProgress,
-    Table,
-    TableHead,
-    TableRow,
-    TableCell,
-    TableBody,
+    Grid,
 } from '@mui/material';
-import {
-    Search as SearchIcon,
-    HomeWork as HomeIcon,
-    Person as PersonIcon,
-} from '@mui/icons-material';
-import api from '../services/api';
-import { ContractsService, type Contract } from '../services/contracts';
+import type { ChipProps } from '@mui/material/Chip';
 
-interface Property {
-    id: string;
-    name: string;
-    propertyType: string;
-    description?: string | null;
-    street: string;
-    number: string;
-    neighborhood: string;
-    city: string;
-    state: string;
-    propertyStatus: string; // "Disponível", "Alugado", etc.
-    clientName?: string | null;   // inquilino atual (snapshot do imóvel)
-    clientPhone?: string | null;
-}
+import api from '../services/api';
+import type { PropertyDetailsDTO, PropertyListItemDTO } from '../types/Property';
+import type { ContractHistoryItemDTO } from '../types/Contract';
+
+type StatusFilter = 'ALL' | 'ALUGADO' | 'DISPONIVEL';
+
+// ---- Helpers de UI (fora do componente) ----
+
+// cor do chip de status do imóvel (Alugado / Disponível)
+const getPropertyStatusChipColor = (status: PropertyListItemDTO['status']): ChipProps['color'] => {
+    if (status === 'ALUGADO') return 'warning';
+    if (status === 'DISPONIVEL') return 'success';
+    return 'default';
+};
+
+// cor dos chips de filtro (Todos / Alugados / Disponíveis)
+const getFilterChipColor = (active: boolean): ChipProps['color'] =>
+    active ? 'primary' : 'default';
+
+// cor do chip de status do contrato (Ativo / Encerrado / Rescindido)
+const getContractStatusChipColor = (status: string): ChipProps['color'] => {
+    if (status === 'ATIVO') return 'success';
+    if (status === 'ENCERRADO') return 'default';
+    if (status === 'RESCINDIDO') return 'warning';
+    return 'default';
+};
+
+const formatAddressFromDescription = (description?: string | null) => {
+    if (!description) return 'Endereço não informado';
+    return description;
+};
 
 export function Tenants() {
-    const [searchParams] = useSearchParams();
-    const initialPropertyIdFromUrl = searchParams.get('propertyId');
-
-    const [properties, setProperties] = useState<Property[]>([]);
-    const [loadingProperties, setLoadingProperties] = useState(false);
-    const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
-
-    const [contracts, setContracts] = useState<Contract[]>([]);
-    const [loadingContracts, setLoadingContracts] = useState(false);
+    const [properties, setProperties] = useState<PropertyListItemDTO[]>([]);
+    const [filteredProperties, setFilteredProperties] = useState<PropertyListItemDTO[]>([]);
+    const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
+    const [propertyDetails, setPropertyDetails] = useState<PropertyDetailsDTO | null>(null);
+    const [contractsHistory, setContractsHistory] = useState<ContractHistoryItemDTO[]>([]);
 
     const [search, setSearch] = useState('');
+    const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
 
-    // --------- CARREGAR IMÓVEIS ----------
-    async function loadProperties() {
+    const [loadingList, setLoadingList] = useState(false);
+    const [loadingDetails, setLoadingDetails] = useState(false);
+
+    // ---- Carregar lista de imóveis (sidebar) ----
+    const fetchProperties = async () => {
         try {
-            setLoadingProperties(true);
-            const response = await api.get<Property[]>('/properties');
-            const list = response.data ?? [];
+            setLoadingList(true);
+            const response = await api.get<PropertyListItemDTO[]>('/properties');
+            setProperties(response.data);
+            setFilteredProperties(response.data);
 
-            setProperties(list);
-
-            if (list.length > 0 && !selectedProperty) {
-                if (initialPropertyIdFromUrl) {
-                    const found = list.find(
-                        (p) => String(p.id) === String(initialPropertyIdFromUrl),
-                    );
-                    setSelectedProperty(found ?? list[0]);
-                } else {
-                    setSelectedProperty(list[0]);
-                }
+            if (response.data.length > 0 && !selectedPropertyId) {
+                setSelectedPropertyId(response.data[0].id);
             }
         } catch (error) {
-            console.error('Erro ao carregar imóveis', error);
+            console.error('Erro ao buscar imóveis:', error);
         } finally {
-            setLoadingProperties(false);
+            setLoadingList(false);
         }
-    }
+    };
 
-    // --------- CARREGAR CONTRATOS DO IMÓVEL ----------
-    async function loadContracts(propertyId: string) {
+    // ---- Carregar detalhes + histórico do imóvel selecionado ----
+    const fetchPropertyDetailsAndContracts = async (propertyId: string) => {
         try {
-            setLoadingContracts(true);
-            const response = await ContractsService.listByProperty(propertyId);
-            setContracts(response.data ?? []);
-        } catch (error) {
-            console.error('Erro ao carregar contratos do imóvel', error);
-            setContracts([]);
-        } finally {
-            setLoadingContracts(false);
-        }
-    }
+            setLoadingDetails(true);
 
+            const [detailsRes, contractsRes] = await Promise.all([
+                api.get<PropertyDetailsDTO>(`/properties/${propertyId}`),
+                api.get<ContractHistoryItemDTO[]>(`/properties/${propertyId}/contracts`),
+            ]);
+
+            setPropertyDetails(detailsRes.data);
+            setContractsHistory(contractsRes.data);
+        } catch (error) {
+            console.error('Erro ao buscar detalhes do imóvel:', error);
+        } finally {
+            setLoadingDetails(false);
+        }
+    };
+
+    // Carrega lista inicial
     useEffect(() => {
-        void loadProperties();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        fetchProperties();
     }, []);
 
+    // Quando mudar o imóvel selecionado, carrega detalhes + contratos
     useEffect(() => {
-        if (selectedProperty?.id) {
-            void loadContracts(selectedProperty.id);
+        if (selectedPropertyId) {
+            fetchPropertyDetailsAndContracts(selectedPropertyId);
+        } else {
+            setPropertyDetails(null);
+            setContractsHistory([]);
         }
-    }, [selectedProperty?.id]);
+    }, [selectedPropertyId]);
 
-    // --------- FILTRO DE IMÓVEIS ----------
-    const filteredProperties = useMemo(() => {
-        if (!search.trim()) return properties;
+    // Filtro por busca + status
+    useEffect(() => {
+        let result = [...properties];
 
-        const term = search.toLowerCase();
-
-        return properties.filter((p) => {
-            const parts = [
-                p.name,
-                p.propertyType,
-                p.street,
-                p.number,
-                p.neighborhood,
-                p.city,
-                p.state,
-                p.clientName,
-            ]
-                .filter(Boolean)
-                .join(' ')
-                .toLowerCase();
-
-            return parts.includes(term);
-        });
-    }, [properties, search]);
-
-    // --------- HELPERS ----------
-    function formatAddress(property: Property) {
-        return `${property.street}, ${property.number} - ${property.neighborhood} - ${property.city}/${property.state}`;
-    }
-
-    function formatPeriod(c: Contract) {
-        if (c.endDate) {
-            return `${c.startDate} → ${c.endDate}`;
+        if (search.trim()) {
+            const term = search.toLowerCase();
+            result = result.filter(
+                (p) =>
+                    p.name.toLowerCase().includes(term) ||
+                    (p.description ?? '').toLowerCase().includes(term) ||
+                    (p.currentTenant ?? '').toLowerCase().includes(term),
+            );
         }
-        return `${c.startDate} → Atual`;
-    }
 
-    function getStatusChip(c: Contract) {
-        const isActive = c.status === 'ACTIVE';
+        if (statusFilter !== 'ALL') {
+            result = result.filter((p) => p.status === statusFilter);
+        }
 
-        return (
-            <Chip
-                label={isActive ? 'Ativo' : 'Encerrado'}
-                size="small"
-                sx={{
-                    bgcolor: isActive ? '#E8F5E9' : '#FFF3E0',
-                    color: isActive ? '#2E7D32' : '#EF6C00',
-                    fontWeight: 'bold',
-                }}
-            />
-        );
-    }
+        setFilteredProperties(result);
+    }, [search, statusFilter, properties]);
 
-    function getPropertyStatusChip(property: Property) {
-        const isAvailable = property.propertyStatus === 'Disponível';
-
-        return (
-            <Chip
-                label={property.propertyStatus || 'Sem status'}
-                size="small"
-                sx={{
-                    bgcolor: isAvailable ? '#E3F2FD' : '#FFF3E0',
-                    color: isAvailable ? '#1565C0' : '#EF6C00',
-                    fontWeight: 'bold',
-                }}
-            />
-        );
-    }
+    // Descobre contrato atual (ATIVO) a partir do histórico
+    const currentContract = contractsHistory.find((c) => c.status === 'ATIVO');
 
     return (
-        <Box sx={{ display: 'flex', gap: 3, height: 'calc(100vh - 120px)' }}>
+        <Box display="flex" height="100%" gap={2}>
             {/* COLUNA ESQUERDA - LISTA DE IMÓVEIS */}
-            <Box sx={{ width: 360, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
-                <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
-                    Imóveis / Inquilinos
-                </Typography>
-
-                <TextField
-                    size="small"
-                    placeholder="Buscar por endereço ou inquilino..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    InputProps={{
-                        startAdornment: (
-                            <InputAdornment position="start">
-                                <SearchIcon fontSize="small" />
-                            </InputAdornment>
-                        ),
+            <Box width="320px" display="flex" flexDirection="column" gap={2}>
+                <Card
+                    sx={{
+                        p: 2,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        height: '100%',
                     }}
-                    sx={{ mb: 2 }}
-                />
+                >
+                    <Typography variant="h6" fontWeight={600} gutterBottom>
+                        Imóveis / Inquilinos
+                    </Typography>
 
-                <Paper variant="outlined" sx={{ flex: 1, overflow: 'auto' }}>
-                    {loadingProperties && (
-                        <Box sx={{ p: 2, display: 'flex', justifyContent: 'center' }}>
-                            <CircularProgress size={24} />
-                        </Box>
-                    )}
+                    {/* Busca */}
+                    <TextField
+                        size="small"
+                        placeholder="Buscar por imóvel ou inquilino..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        fullWidth
+                        sx={{ mb: 2 }}
+                    />
 
-                    {!loadingProperties && filteredProperties.length === 0 && (
-                        <Box sx={{ p: 2 }}>
-                            <Typography variant="body2" color="text.secondary">
+                    {/* Filtros de status */}
+                    <Stack direction="row" spacing={1} mb={2}>
+                        <Chip
+                            label="Todos"
+                            size="small"
+                            color={getFilterChipColor(statusFilter === 'ALL')}
+                            onClick={() => setStatusFilter('ALL')}
+                        />
+                        <Chip
+                            label="Alugados"
+                            size="small"
+                            color={getFilterChipColor(statusFilter === 'ALUGADO')}
+                            onClick={() => setStatusFilter('ALUGADO')}
+                        />
+                        <Chip
+                            label="Disponíveis"
+                            size="small"
+                            color={getFilterChipColor(statusFilter === 'DISPONIVEL')}
+                            onClick={() => setStatusFilter('DISPONIVEL')}
+                        />
+                    </Stack>
+
+                    <Divider />
+
+                    {/* Lista */}
+                    <Box flex={1} mt={1} sx={{ overflowY: 'auto' }}>
+                        {loadingList ? (
+                            <Box display="flex" justifyContent="center" mt={4}>
+                                <CircularProgress size={24} />
+                            </Box>
+                        ) : filteredProperties.length === 0 ? (
+                            <Typography variant="body2" color="text.secondary" mt={2}>
                                 Nenhum imóvel encontrado.
                             </Typography>
-                        </Box>
-                    )}
-
-                    {!loadingProperties && filteredProperties.length > 0 && (
-                        <List
-                            dense
-                            subheader={
-                                <ListSubheader component="div">
-                                    {filteredProperties.length} imóvel(is) encontrado(s)
-                                </ListSubheader>
-                            }
-                        >
-                            {filteredProperties.map((property) => {
-                                const selected = selectedProperty?.id === property.id;
-
-                                return (
+                        ) : (
+                            <List dense>
+                                {filteredProperties.map((property) => (
                                     <ListItemButton
                                         key={property.id}
-                                        selected={selected}
-                                        onClick={() => setSelectedProperty(property)}
-                                        alignItems="flex-start"
+                                        selected={property.id === selectedPropertyId}
+                                        onClick={() => setSelectedPropertyId(property.id)}
+                                        sx={{
+                                            borderRadius: 1,
+                                            mb: 0.5,
+                                        }}
                                     >
                                         <ListItemText
                                             primary={
-                                                <Box
-                                                    sx={{
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: 1,
-                                                    }}
-                                                >
-                                                    <HomeIcon fontSize="small" />
-                                                    <Typography
-                                                        variant="subtitle2"
-                                                        sx={{ fontWeight: 600 }}
-                                                    >
-                                                        {property.name || 'Imóvel sem nome'}
+                                                <Box display="flex" justifyContent="space-between" alignItems="center">
+                                                    <Typography variant="subtitle2" fontWeight={600}>
+                                                        {property.name}
                                                     </Typography>
+                                                    <Chip
+                                                        size="small"
+                                                        label={property.status === 'ALUGADO' ? 'Alugado' : 'Disponível'}
+                                                        color={getPropertyStatusChipColor(property.status)}
+                                                    />
                                                 </Box>
                                             }
                                             secondary={
-                                                <>
-                                                    <Typography
-                                                        component="span"
-                                                        variant="body2"
-                                                        color="text.secondary"
-                                                        sx={{ display: 'block' }}
-                                                    >
-                                                        {formatAddress(property)}
+                                                <Box mt={0.5}>
+                                                    <Typography variant="caption" color="text.secondary" display="block">
+                                                        {formatAddressFromDescription(property.description)}
                                                     </Typography>
-
-                                                    <Box
-                                                        sx={{
-                                                            display: 'flex',
-                                                            alignItems: 'center',
-                                                            gap: 1,
-                                                            mt: 0.5,
-                                                        }}
-                                                    >
-                                                        {getPropertyStatusChip(property)}
-
-                                                        {property.clientName && (
-                                                            <Chip
-                                                                icon={<PersonIcon />}
-                                                                label={property.clientName}
-                                                                size="small"
-                                                                sx={{ maxWidth: 180 }}
-                                                            />
-                                                        )}
-                                                    </Box>
-                                                </>
+                                                    {property.currentTenant && (
+                                                        <Typography variant="caption" color="text.secondary" display="block">
+                                                            Inquilino: <strong>{property.currentTenant}</strong>
+                                                        </Typography>
+                                                    )}
+                                                </Box>
                                             }
                                         />
                                     </ListItemButton>
-                                );
-                            })}
-                        </List>
-                    )}
-                </Paper>
+                                ))}
+                            </List>
+                        )}
+                    </Box>
+                </Card>
             </Box>
 
-            {/* COLUNA DIREITA - DETALHES + HISTÓRICO */}
-            <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                {selectedProperty ? (
-                    <>
-                        {/* Card do imóvel */}
-                        <Paper
-                            variant="outlined"
-                            sx={{
-                                p: 2,
-                                mb: 2,
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: 1,
-                            }}
-                        >
-                            <Box
-                                sx={{
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    alignItems: 'center',
-                                }}
-                            >
+            {/* COLUNA DIREITA - DETALHES DO IMÓVEL + HISTÓRICO */}
+            <Box flex={1} display="flex" flexDirection="column" gap={2}>
+                {/* Detalhes do imóvel + inquilino atual */}
+                <Card sx={{ p: 3 }}>
+                    {loadingDetails && !propertyDetails ? (
+                        <Box display="flex" justifyContent="center" mt={4}>
+                            <CircularProgress size={24} />
+                        </Box>
+                    ) : !propertyDetails ? (
+                        <Typography variant="body1" color="text.secondary">
+                            Selecione um imóvel na lista ao lado para ver os detalhes.
+                        </Typography>
+                    ) : (
+                        <>
+                            {/* Cabeçalho do imóvel */}
+                            <Box display="flex" justifyContent="space-between" alignItems="flex-start">
                                 <Box>
-                                    <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                                        {selectedProperty.name || 'Imóvel selecionado'}
+                                    <Typography variant="h6" fontWeight={600}>
+                                        {propertyDetails.name}
                                     </Typography>
                                     <Typography variant="body2" color="text.secondary">
-                                        {formatAddress(selectedProperty)}
+                                        {formatAddressFromDescription(propertyDetails.description)}
                                     </Typography>
-                                </Box>
-
-                                <Box sx={{ display: 'flex', gap: 1 }}>
-                                    {getPropertyStatusChip(selectedProperty)}
-                                    {selectedProperty.propertyType && (
-                                        <Chip
-                                            label={selectedProperty.propertyType}
-                                            size="small"
-                                        />
+                                    {propertyDetails.propertyType && (
+                                        <Typography variant="body2" color="text.secondary">
+                                            Tipo: {propertyDetails.propertyType}
+                                        </Typography>
                                     )}
                                 </Box>
+
+                                <Stack direction="row" spacing={1}>
+                                    {filteredProperties.find((p) => p.id === propertyDetails.id) && (
+                                        <Chip
+                                            label={
+                                                filteredProperties.find((p) => p.id === propertyDetails.id)?.status ===
+                                                'ALUGADO'
+                                                    ? 'Alugado'
+                                                    : 'Disponível'
+                                            }
+                                            color={getPropertyStatusChipColor(
+                                                filteredProperties.find((p) => p.id === propertyDetails.id)!.status,
+                                            )}
+                                        />
+                                    )}
+                                </Stack>
                             </Box>
 
-                            <Divider sx={{ my: 1.5 }} />
+                            <Divider sx={{ my: 2 }} />
 
-                            <Box
-                                sx={{
-                                    display: 'flex',
-                                    flexWrap: 'wrap',
-                                    gap: 2,
-                                }}
-                            >
-                                <Box>
-                                    <Typography variant="caption" color="text.secondary">
+                            {/* Inquilino atual */}
+                            <Grid container spacing={2}>
+                                <Grid item xs={12} md={6}>
+                                    <Typography variant="subtitle2" gutterBottom>
                                         Inquilino atual
                                     </Typography>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                        <PersonIcon fontSize="small" />
-                                        <Typography variant="body2">
-                                            {selectedProperty.clientName || 'Sem inquilino ativo'}
+                                    {currentContract ? (
+                                        <Box>
+                                            <Typography variant="body2">
+                                                <strong>Nome:</strong> {currentContract.tenantName}
+                                            </Typography>
+                                            {currentContract.startDate && (
+                                                <Typography variant="body2">
+                                                    <strong>Início contrato:</strong> {currentContract.startDate}
+                                                </Typography>
+                                            )}
+                                            {currentContract.endDate && (
+                                                <Typography variant="body2">
+                                                    <strong>Fim previsto:</strong> {currentContract.endDate}
+                                                </Typography>
+                                            )}
+                                            <Typography variant="body2">
+                                                <strong>Aluguel:</strong> {currentContract.rentValue}
+                                            </Typography>
+                                        </Box>
+                                    ) : (
+                                        <Typography variant="body2" color="text.secondary">
+                                            Nenhum contrato ativo para este imóvel.
                                         </Typography>
-                                    </Box>
-                                </Box>
+                                    )}
+                                </Grid>
 
-                                <Box>
-                                    <Typography variant="caption" color="text.secondary">
-                                        Telefone
+                                <Grid item xs={12} md={6}>
+                                    <Typography variant="subtitle2" gutterBottom>
+                                        Observações do imóvel
                                     </Typography>
-                                    <Typography variant="body2">
-                                        {selectedProperty.clientPhone || '-'}
+                                    <Typography variant="body2" color="text.secondary">
+                                        {propertyDetails.notes?.trim()
+                                            ? propertyDetails.notes
+                                            : 'Nenhuma observação cadastrada.'}
                                     </Typography>
-                                </Box>
-                            </Box>
-                        </Paper>
+                                </Grid>
+                            </Grid>
+                        </>
+                    )}
+                </Card>
 
-                        {/* Histórico de contratos */}
-                        <Paper variant="outlined" sx={{ flex: 1, p: 2, overflow: 'auto' }}>
-                            <Typography
-                                variant="subtitle1"
-                                sx={{ mb: 2, fontWeight: 600 }}
-                            >
-                                Histórico de contratos
-                            </Typography>
+                {/* Histórico de contratos */}
+                <Card sx={{ p: 3, flex: 1, minHeight: 200 }}>
+                    <Typography variant="h6" fontWeight={600} gutterBottom>
+                        Histórico de contratos
+                    </Typography>
 
-                            {loadingContracts && (
-                                <Box
-                                    sx={{
-                                        display: 'flex',
-                                        justifyContent: 'center',
-                                        mt: 3,
-                                    }}
-                                >
-                                    <CircularProgress size={24} />
-                                </Box>
-                            )}
-
-                            {!loadingContracts && contracts.length === 0 && (
-                                <Typography variant="body2" color="text.secondary">
-                                    Nenhum contrato encontrado para este imóvel.
-                                </Typography>
-                            )}
-
-                            {!loadingContracts && contracts.length > 0 && (
-                                <Table size="small">
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell>Inquilino</TableCell>
-                                            <TableCell>Telefone</TableCell>
-                                            <TableCell>Período</TableCell>
-                                            <TableCell>Valor aluguel</TableCell>
-                                            <TableCell>Condomínio</TableCell>
-                                            <TableCell>Dia pgto</TableCell>
-                                            <TableCell>Status</TableCell>
-                                            <TableCell>Motivo rescisão</TableCell>
-                                        </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                        {contracts.map((c) => (
-                                            <TableRow key={c.id}>
-                                                <TableCell>{c.tenantName}</TableCell>
-                                                <TableCell>{c.tenantPhone}</TableCell>
-                                                <TableCell>{formatPeriod(c)}</TableCell>
-                                                <TableCell>{c.rentValue}</TableCell>
-                                                <TableCell>{c.condoValue}</TableCell>
-                                                <TableCell>{c.paymentDay}</TableCell>
-                                                <TableCell>{getStatusChip(c)}</TableCell>
-                                                <TableCell>
-                                                    {c.terminationReason || '-'}
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            )}
-                        </Paper>
-                    </>
-                ) : (
-                    <Paper
-                        variant="outlined"
-                        sx={{
-                            flex: 1,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                        }}
-                    >
+                    {loadingDetails && !propertyDetails ? (
+                        <Box display="flex" justifyContent="center" mt={4}>
+                            <CircularProgress size={24} />
+                        </Box>
+                    ) : contractsHistory.length === 0 ? (
                         <Typography variant="body2" color="text.secondary">
-                            Selecione um imóvel na lista ao lado para ver o histórico de
-                            contratos.
+                            Nenhum contrato encontrado para este imóvel.
                         </Typography>
-                    </Paper>
-                )}
+                    ) : (
+                        <Box mt={1}>
+                            {contractsHistory.map((contract) => (
+                                <Box key={contract.id} mb={1.5}>
+                                    <Box display="flex" justifyContent="space-between" alignItems="center">
+                                        <Box>
+                                            <Typography variant="subtitle2">{contract.tenantName}</Typography>
+                                            <Typography variant="body2" color="text.secondary">
+                                                {contract.startDate ?? '–'}{' '}
+                                                {contract.endDate ? `até ${contract.endDate}` : ''}
+                                            </Typography>
+                                            <Typography variant="body2" color="text.secondary">
+                                                Valor: {contract.rentValue}
+                                            </Typography>
+                                        </Box>
+                                        <Chip
+                                            size="small"
+                                            label={
+                                                contract.status === 'ATIVO'
+                                                    ? 'Ativo'
+                                                    : contract.status === 'ENCERRADO'
+                                                        ? 'Encerrado'
+                                                        : contract.status === 'RESCINDIDO'
+                                                            ? 'Rescindido'
+                                                            : contract.status
+                                            }
+                                            color={getContractStatusChipColor(contract.status)}
+                                        />
+                                    </Box>
+                                    <Divider sx={{ mt: 1 }} />
+                                </Box>
+                            ))}
+                        </Box>
+                    )}
+                </Card>
             </Box>
         </Box>
     );

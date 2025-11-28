@@ -20,18 +20,27 @@ import {
 import api from '../../services/api';
 import { ClientModal } from '../clients/ClientModal';
 
-// --- INTERFACES ---
+// --- DTOS / INTERFACES AUXILIARES ---
+interface ContractHistoryItemDTO {
+    id: string;
+    tenantName: string;
+    startDate: string | null;
+    endDate: string | null;
+    rentValue: number;
+    status: string; // "ATIVO", "ENCERRADO", etc.
+}
+
 interface Property {
     id: string;
     name: string;
     propertyType: string;
     description: string;
 
-    // Campos básicos de cliente já existentes
+    // dados simples de cliente no cartão
     clientName: string;
     clientPhone: string;
 
-    // 👇 NOVOS CAMPOS QUE VÃO PRO BACKEND (ajuste os nomes se no Java estiver diferente)
+    // ficha completa de inquilino/cliente
     tenantType?: 'PF' | 'PJ';
     tenantCpf?: string;
     tenantRg?: string;
@@ -47,7 +56,7 @@ interface Property {
     legalRepName?: string;
     legalRepCpf?: string;
 
-    // resto do imóvel
+    // campos do imóvel
     matricula: string;
     cagece: string;
     enel: string;
@@ -64,8 +73,8 @@ interface Property {
     notes: string;
     lat: number;
     lng: number;
-    contractStartDate?: string; // início dd/mm/aaaa
-    monthsLate?: number;        // meses em atraso
+    contractStartDate?: string;
+    monthsLate?: number;
 }
 
 interface PropertyModalProps {
@@ -78,11 +87,11 @@ interface PropertyModalProps {
     initialAddress?: string;
 }
 
-// 👇 agora está EXPORTADO (usado pelo ClientModal)
+// exportado pro ClientModal
 export interface ClientForm {
-    type: 'PF' | 'PJ';      // Pessoa Física ou Jurídica
+    type: 'PF' | 'PJ';
 
-    // Pessoa Física
+    // PF
     name: string;
     cpf: string;
     rg: string;
@@ -94,14 +103,14 @@ export interface ClientForm {
     maritalStatus: string;
     profession: string;
 
-    // Empresa (PJ)
+    // PJ
     companyName: string;
     cnpj: string;
     legalRepName: string;
     legalRepCpf: string;
 }
 
-// --- Máscaras ---
+// --- Máscaras / helpers ---
 const formatCurrency = (value: string) => {
     const numericValue = value.replace(/\D/g, '');
     if (!numericValue) return '';
@@ -127,7 +136,6 @@ const maskPhone = (value: string) => {
         .replace(/(\d)(\d{4})$/, '$1-$2');
 };
 
-// helper para converter "dd/MM/yyyy" em Date
 const parseBrDate = (str: string | undefined) => {
     if (!str) return null;
     const parts = str.split('/');
@@ -138,6 +146,22 @@ const parseBrDate = (str: string | undefined) => {
     if (isNaN(date.getTime())) return null;
     return date;
 };
+
+// busca contratos do imóvel e traz o ATIVO
+async function loadActiveContract(propertyId: string) {
+    try {
+        const response = await api.get<ContractHistoryItemDTO[]>(
+            `/properties/${propertyId}/contracts`,
+        );
+
+        const contracts = response.data || [];
+        const active = contracts.find(c => c.status === 'ATIVO');
+        return active || null;
+    } catch (error) {
+        console.error('Erro ao buscar contratos do imóvel:', error);
+        return null;
+    }
+}
 
 export function PropertyModal({
                                   open,
@@ -193,9 +217,8 @@ export function PropertyModal({
         monthsLate: 0,
     });
 
-    // ESTADO DO MODAL DE CLIENTE
     const [clientForm, setClientForm] = useState<ClientForm>({
-        type: 'PF', // padrão Pessoa Física
+        type: 'PF',
         name: '',
         cpf: '',
         rg: '',
@@ -217,25 +240,21 @@ export function PropertyModal({
     const openClientModal = () => {
         setClientForm(prev => ({
             ...prev,
-            // mantém o que já tem, mas sincroniza campos principais
             name: formData.clientName || prev.name,
             phone1: formData.clientPhone || prev.phone1,
         }));
         setIsClientModalOpen(true);
     };
 
-    // 👉 quando clica em "Salvar Cliente" no modal de cliente
     const handleSaveClientFromModal = () => {
         setFormData(prev => ({
             ...prev,
-            // campos que o imóvel já usava
             clientName:
                 clientForm.type === 'PJ'
                     ? clientForm.companyName || clientForm.name
                     : clientForm.name,
             clientPhone: clientForm.phone1,
 
-            // 👇 manda TODA a ficha do cliente para o backend
             tenantType: clientForm.type,
             tenantCpf: clientForm.cpf,
             tenantRg: clientForm.rg,
@@ -259,11 +278,11 @@ export function PropertyModal({
         setClientForm(updated);
     };
 
+    // carregar dados quando abrir o modal
     useEffect(() => {
         if (!open) return;
 
         if (propertyToEdit) {
-            // Preenche dados do imóvel
             setFormData({
                 ...propertyToEdit,
                 rentValue: propertyToEdit.rentValue
@@ -289,7 +308,6 @@ export function PropertyModal({
                 tenantType: propertyToEdit.tenantType || 'PF',
             });
 
-            // Pré-preenche o formulário de cliente com o que veio do backend
             setClientForm({
                 type: (propertyToEdit.tenantType as 'PF' | 'PJ') || 'PF',
                 name: propertyToEdit.clientName || '',
@@ -307,8 +325,28 @@ export function PropertyModal({
                 legalRepName: propertyToEdit.legalRepName || '',
                 legalRepCpf: propertyToEdit.legalRepCpf || '',
             });
+
+            // carrega contrato ativo só pra exibição
+            loadActiveContract(propertyToEdit.id).then(active => {
+                if (!active) return;
+
+                setFormData(prev => ({
+                    ...prev,
+                    clientName: active.tenantName || prev.clientName,
+                    rentValue: active.rentValue
+                        ? formatCurrency(String(active.rentValue))
+                        : prev.rentValue,
+                    contractStartDate: active.startDate || prev.contractStartDate,
+                    contractDueDate: active.endDate || prev.contractDueDate,
+                }));
+
+                setClientForm(prev => ({
+                    ...prev,
+                    name: active.tenantName || prev.name,
+                }));
+            });
         } else {
-            // Novo imóvel
+            // novo imóvel
             setFormData({
                 id: '',
                 name: '',
@@ -369,20 +407,12 @@ export function PropertyModal({
         }
     }, [open, propertyToEdit, initialLat, initialLng, initialAddress]);
 
-    // 🔹 CALCULAR AUTOMÁTICO OS MESES DE CONTRATO
+    // cálculo automático dos meses de contrato
     useEffect(() => {
         const start = parseBrDate(formData.contractStartDate);
         const end = parseBrDate(formData.contractDueDate);
 
-        if (!start || !end) {
-            setFormData(prev => ({
-                ...prev,
-                contractMonths: '',
-            }));
-            return;
-        }
-
-        if (end < start) {
+        if (!start || !end || end < start) {
             setFormData(prev => ({
                 ...prev,
                 contractMonths: '',
@@ -402,27 +432,40 @@ export function PropertyModal({
 
     const handleSave = async () => {
         try {
-            const payload: Property = {
-                ...formData,
-                monthsLate: formData.monthsLate ?? 0,
+            const propertyPayload = {
+                name: formData.name,
+                propertyType: formData.propertyType,
+                description: formData.description,
+                matricula: formData.matricula,
+                cagece: formData.cagece,
+                enel: formData.enel,
+                lastRenovation: formData.lastRenovation,
+                propertyStatus: formData.propertyStatus,
+                iptuStatus: formData.iptuStatus,
+                notes: formData.notes,
+                lat: formData.lat,
+                lng: formData.lng,
             };
 
-            if (payload.id) {
-                await api.put(`/properties/${payload.id}`, payload);
-                alert('Imóvel atualizado!');
+            console.log('PROPERTY PAYLOAD ->', propertyPayload);
+
+            let propertyId = formData.id;
+
+            if (propertyId) {
+                await api.put(`/properties/${propertyId}`, propertyPayload);
             } else {
-                await api.post('/properties', payload);
-                alert('Imóvel cadastrado!');
+                const { data } = await api.post<Property>('/properties', propertyPayload);
+                propertyId = data.id;
             }
+
             onSaveSuccess();
             onClose();
         } catch (error) {
-            console.error(error);
-            alert('Erro ao salvar.');
+            console.error('Erro ao salvar imóvel:', error);
+            alert('Erro ao salvar imóvel. Veja o console para detalhes.');
         }
     };
 
-    // Helper para Título de Seção (Roxo e Moderno)
     const SectionTitle = ({ title }: { title: string }) => (
         <Grid item xs={12} sx={{ mt: 1, mb: 0 }}>
             <Typography
@@ -478,7 +521,7 @@ export function PropertyModal({
                 <DialogContent className="custom-scrollbar-content" sx={{ px: 4, pb: 4 }}>
                     <Box sx={{ mt: 4 }}>
                         <Grid container spacing={3}>
-                            {/* 1. DADOS DO IMÓVEL */}
+                            {/* DADOS DO IMÓVEL */}
                             <SectionTitle title="Dados do Imóvel" />
 
                             <Grid item xs={12} sm={8}>
@@ -575,7 +618,7 @@ export function PropertyModal({
                                 </TextField>
                             </Grid>
 
-                            {/* 2. CLIENTE */}
+                            {/* CLIENTE */}
                             <SectionTitle title="Inquilino / Cliente" />
 
                             <Grid item xs={12} sm={6}>
@@ -620,7 +663,7 @@ export function PropertyModal({
                                 />
                             </Grid>
 
-                            {/* 3. FINANCEIRO */}
+                            {/* FINANCEIRO */}
                             <SectionTitle title="Financeiro" />
 
                             <Grid item xs={12} sm={4}>
@@ -671,7 +714,7 @@ export function PropertyModal({
                                 />
                             </Grid>
 
-                            {/* 4. CONTRATO */}
+                            {/* CONTRATO (somente visual, contrato real é outra tela) */}
                             <SectionTitle title="Contrato" />
 
                             <Grid item xs={12} sm={4}>
@@ -689,10 +732,7 @@ export function PropertyModal({
                                     InputLabelProps={{ shrink: true }}
                                 >
                                     {[5, 10, 15, 20, 25].map(day => (
-                                        <MenuItem
-                                            key={day}
-                                            value={day.toString().padStart(2, '0')}
-                                        >
+                                        <MenuItem key={day} value={day.toString().padStart(2, '0')}>
                                             {day}
                                         </MenuItem>
                                     ))}
@@ -757,7 +797,7 @@ export function PropertyModal({
                                 />
                             </Grid>
 
-                            {/* 5. MEDIDORES & EXTRAS */}
+                            {/* MEDIDORES & DETALHES */}
                             <SectionTitle title="Medidores & Detalhes" />
 
                             <Grid item xs={12} sm={6}>
@@ -920,7 +960,6 @@ export function PropertyModal({
                 </DialogActions>
             </Dialog>
 
-            {/* MODAL DE CLIENTE (PF / PJ) */}
             <ClientModal
                 open={isClientModalOpen}
                 form={clientForm}
