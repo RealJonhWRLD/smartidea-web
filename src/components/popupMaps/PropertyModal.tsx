@@ -110,6 +110,25 @@ export interface ClientForm {
     legalRepCpf: string;
 }
 
+interface TenantDTO {
+    id: string;
+    name: string;
+    tenantType: string;
+    tenantCpf: string;
+    tenantRg: string;
+    tenantEmail: string;
+    tenantPhone: string;
+    tenantPhone2: string;
+    tenantSocial: string;
+    tenantBirthDate: string;
+    tenantMaritalStatus: string;
+    tenantProfession: string;
+    companyName: string;
+    companyCnpj: string;
+    legalRepName: string;
+    legalRepCpf: string;
+}
+
 // --- Máscaras / helpers ---
 const formatCurrency = (value: string) => {
     const numericValue = value.replace(/\D/g, '');
@@ -432,6 +451,7 @@ export function PropertyModal({
 
     const handleSave = async () => {
         try {
+            // 1) Monta payload do IMÓVEL
             const propertyPayload = {
                 name: formData.name,
                 propertyType: formData.propertyType,
@@ -447,10 +467,9 @@ export function PropertyModal({
                 lng: formData.lng,
             };
 
-            console.log('PROPERTY PAYLOAD ->', propertyPayload);
-
             let propertyId = formData.id;
 
+            // 2) Cria ou atualiza o IMÓVEL
             if (propertyId) {
                 await api.put(`/properties/${propertyId}`, propertyPayload);
             } else {
@@ -458,13 +477,42 @@ export function PropertyModal({
                 propertyId = data.id;
             }
 
+            // 3) Se tiver dados mínimos do contrato + nome do inquilino,
+            //    cria um CONTRATO para esse imóvel
+            if (
+                propertyId &&
+                formData.clientName.trim().length > 0 &&         // inquilino / cliente
+                formData.contractStartDate &&                    // início do contrato
+                formData.contractDueDate                         // fim do contrato
+            ) {
+                const contractPayload = {
+                    propertyId,                                   // UUID do imóvel
+                    tenantName: formData.clientName.trim(),      // nome do inquilino
+                    rentValue: formData.rentValue,               // "R$ 2.000,00" (String)
+                    condoValue: formData.condoValue,
+                    depositValue: formData.depositValue,
+                    paymentDay: formData.rentDueDate,            // "05", "10", etc
+                    monthsInContract: formData.contractMonths
+                        ? Number(formData.contractMonths)
+                        : null,
+                    iptuStatus: formData.iptuStatus,
+                    notes: formData.notes,
+                    startDate: formData.contractStartDate,       // "DD/MM/AAAA"
+                    endDate: formData.contractDueDate,
+                };
+
+                // PropertyContractController.createContract(ContractCreateRequest)
+                await api.post('/contracts', contractPayload);
+            }
+
             onSaveSuccess();
             onClose();
         } catch (error) {
-            console.error('Erro ao salvar imóvel:', error);
-            alert('Erro ao salvar imóvel. Veja o console para detalhes.');
+            console.error('Erro ao salvar imóvel/contrato:', error);
+            alert('Erro ao salvar dados do imóvel/contrato. Veja o console para detalhes.');
         }
     };
+
 
     const SectionTitle = ({ title }: { title: string }) => (
         <Grid item xs={12} sx={{ mt: 1, mb: 0 }}>
