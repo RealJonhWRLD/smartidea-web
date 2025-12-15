@@ -27,7 +27,7 @@ interface ContractHistoryItemDTO {
     startDate: string | null;
     endDate: string | null;
     rentValue: number;
-    status: string; // "ATIVO", "ENCERRADO", etc.
+    status: string; // // "ACTIVE", "FINISHED", etc.
 }
 
 interface Property {
@@ -174,7 +174,7 @@ async function loadActiveContract(propertyId: string) {
         );
 
         const contracts = response.data || [];
-        const active = contracts.find(c => c.status === 'ATIVO');
+        const active = contracts.find(c => c.status === 'ACTIVE');
         return active || null;
     } catch (error) {
         console.error('Erro ao buscar contratos do imóvel:', error);
@@ -451,7 +451,7 @@ export function PropertyModal({
 
     const handleSave = async () => {
         try {
-            // 1) Monta payload do IMÓVEL
+            //Monta payload do IMÓVEL (somente imóvel)
             const propertyPayload = {
                 name: formData.name,
                 propertyType: formData.propertyType,
@@ -467,52 +467,22 @@ export function PropertyModal({
                 lng: formData.lng,
             };
 
-            let propertyId = formData.id;
-
-            // 2) Cria ou atualiza o IMÓVEL
-            if (propertyId) {
-                await api.put(`/properties/${propertyId}`, propertyPayload);
+            // Cria ou atualiza o IMÓVEL
+            if (formData.id) {
+                await api.put(`/properties/${formData.id}`, propertyPayload);
             } else {
-                const { data } = await api.post<Property>('/properties', propertyPayload);
-                propertyId = data.id;
+                await api.post('/properties', propertyPayload);
             }
 
-            // 3) Se tiver dados mínimos do contrato + nome do inquilino,
-            //    cria um CONTRATO para esse imóvel
-            if (
-                propertyId &&
-                formData.clientName.trim().length > 0 &&         // inquilino / cliente
-                formData.contractStartDate &&                    // início do contrato
-                formData.contractDueDate                         // fim do contrato
-            ) {
-                const contractPayload = {
-                    propertyId,                                   // UUID do imóvel
-                    tenantName: formData.clientName.trim(),      // nome do inquilino
-                    rentValue: formData.rentValue,               // "R$ 2.000,00" (String)
-                    condoValue: formData.condoValue,
-                    depositValue: formData.depositValue,
-                    paymentDay: formData.rentDueDate,            // "05", "10", etc
-                    monthsInContract: formData.contractMonths
-                        ? Number(formData.contractMonths)
-                        : null,
-                    iptuStatus: formData.iptuStatus,
-                    notes: formData.notes,
-                    startDate: formData.contractStartDate,       // "DD/MM/AAAA"
-                    endDate: formData.contractDueDate,
-                };
-
-                // PropertyContractController.createContract(ContractCreateRequest)
-                await api.post('/contracts', contractPayload);
-            }
+            // Contrato (vínculo) será criado na tela de inquilinos via POST /contracts com tenantId + propertyId
 
             onSaveSuccess();
             onClose();
         } catch (error) {
-            console.error('Erro ao salvar imóvel/contrato:', error);
-            alert('Erro ao salvar dados do imóvel/contrato. Veja o console para detalhes.');
+            console.error('Erro ao salvar imóvel:', error);
+            alert('Erro ao salvar dados do imóvel. Veja o console para detalhes.');
         }
     };
-
 
     const SectionTitle = ({ title }: { title: string }) => (
         <Grid item xs={12} sx={{ mt: 1, mb: 0 }}>

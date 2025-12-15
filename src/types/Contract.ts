@@ -1,6 +1,4 @@
-// src/types/Contract.ts
-
-export type ContractStatus = 'ATIVO' | 'ENCERRADO' | 'RESCINDIDO' | string;
+export type ContractStatus = 'ACTIVE' | 'TERMINATED' | string;
 
 export interface ContractHistoryItemDTO {
     id: string;
@@ -23,16 +21,23 @@ export interface ContractDTO {
     status: ContractStatus;
 }
 
+/**
+ * Payload usado no POST /contracts
+ * espelha o ContractRequestDTO do backend
+ */
 export interface ContractCreateRequest {
     propertyId: string;
     tenantId: string;
+
     rentValue: string;
-    condoValue: string;
-    depositValue: string;
     paymentDay: string;
-    iptuStatus: string;
     startDate: string;
-    endDate: string | null;
-    monthsInContract: number | null;
-    notes: string;
+    endDate?: string | null;
+
+    // CAMPOS OPCIONAIS (correto)
+    condoValue?: string | null;
+    depositValue?: string | null;
+    iptuStatus?: string | null;
+    monthsInContract?: number | null;
+    notes?: string | null;
 }

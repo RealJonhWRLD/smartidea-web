@@ -60,13 +60,24 @@ export interface Property {
         name: string;
         description: string | null;
         propertyType: string | null;
-        status: 'ALUGADO' | 'DISPONIVEL';
+
+        // se o backend manda "status" ou "propertyStatus", deixe como opcional
+        status?: 'ALUGADO' | 'DISPONIVEL' | string;
+
+        matricula?: string | null;
+        iptuStatus?: string | null;
+
         currentTenant: string | null;
         currentContractStartDate: string | null;
         currentContractEndDate: string | null;
+
+        currentRentValue?: string | null;
+        currentContractStatus?: string | null;
+
         lat: number;
         lng: number;
     }
+
 
 /**
  * Resposta de GET /api/properties/{id}

@@ -1,51 +1,52 @@
 import api from './api';
+import {
+    ContractDTO,
+    ContractHistoryItemDTO,
+    ContractCreateRequest,
+} from '../types/Contract';
 
-export interface Contract {
-    id: string;
-    propertyId: string; // vamos mapear manualmente do backend
-    tenantName: string;
-    tenantPhone: string;
-    rentValue: string;
-    depositValue: string;
-    condoValue: string;
-    paymentDay: string;
-    startDate: string;      // dd/MM/yyyy
-    endDate?: string | null;
-    monthsInContract?: number | null;
-    monthsLate?: number | null;
-    status: 'ACTIVE' | 'TERMINATED';
-    terminationReason?: string | null;
-    createdAt: string;
-}
-
-export interface CreateContractPayload {
-    propertyId: string;
-    tenantName: string;
-    tenantPhone: string;
-    rentValue: string;
-    depositValue: string;
-    condoValue: string;
-    paymentDay: string;
-    startDate: string; // dd/MM/yyyy
-    endDate?: string;
-    monthsLate?: number;
-}
-
-export interface TerminatePayload {
-    terminationDate?: string;
-    terminationReason?: string;
+export interface TerminateContractPayload {
+    reason?: string;
+    endDate?: string; // "dd/MM/yyyy" (se seu backend aceitar assim)
 }
 
 export const ContractsService = {
-    listByProperty(propertyId: string) {
-        return api.get<Contract[]>(`/contracts/property/${propertyId}`);
+    /**
+     * Histórico de contratos de um imóvel
+     * GET /properties/{id}/contracts
+     */
+    async listHistoryByProperty(propertyId: string) {
+        const { data } = await api.get<ContractHistoryItemDTO[]>(
+            `/properties/${propertyId}/contracts`,
+        );
+        return data;
     },
 
-    create(payload: CreateContractPayload) {
-        return api.post<Contract>('/contracts', payload);
+    /**
+     * Criação de contrato
+     * POST /contracts
+     */
+    async create(payload: ContractCreateRequest) {
+        const { data } = await api.post<ContractDTO>('/contracts', payload);
+        return data;
     },
 
-    terminate(id: string, payload: TerminatePayload) {
-        return api.put<Contract>(`/contracts/${id}/terminate`, payload);
+    /**
+     * Encerrar / rescindir contrato
+     * POST /contracts/{id}/terminate?reason=...&endDate=...
+     */
+    async terminate(id: string, payload: TerminateContractPayload) {
+        const params: Record<string, string> = {};
+
+        if (payload.reason) params.reason = payload.reason;
+        if (payload.endDate) params.endDate = payload.endDate;
+
+        const { data } = await api.post<ContractDTO>(
+            `/contracts/${id}/terminate`,
+            null,
+            { params },
+        );
+
+        return data;
     },
 };

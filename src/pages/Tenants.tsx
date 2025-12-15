@@ -12,34 +12,41 @@ import {
     Typography,
     CircularProgress,
     Grid,
+    Button,
 } from '@mui/material';
 import type { ChipProps } from '@mui/material/Chip';
 
 import api from '../services/api';
 import type { PropertyDetailsDTO, PropertyListItemDTO } from '../types/Property';
 import type { ContractHistoryItemDTO } from '../types/Contract';
+import { LinkContractModal } from '../components/contracts/LinkContractModal';
 
 type StatusFilter = 'ALL' | 'ALUGADO' | 'DISPONIVEL';
 
 // ---- Helpers de UI (fora do componente) ----
-
-// cor do chip de status do imóvel (Alugado / Disponível)
-const getPropertyStatusChipColor = (status: PropertyListItemDTO['status']): ChipProps['color'] => {
+const getPropertyStatusChipColor = (
+    status: PropertyListItemDTO['status'],
+): ChipProps['color'] => {
     if (status === 'ALUGADO') return 'warning';
     if (status === 'DISPONIVEL') return 'success';
     return 'default';
 };
 
-// cor dos chips de filtro (Todos / Alugados / Disponíveis)
 const getFilterChipColor = (active: boolean): ChipProps['color'] =>
     active ? 'primary' : 'default';
 
-// cor do chip de status do contrato (Ativo / Encerrado / Rescindido)
 const getContractStatusChipColor = (status: string): ChipProps['color'] => {
-    if (status === 'ATIVO') return 'success';
-    if (status === 'ENCERRADO') return 'default';
-    if (status === 'RESCINDIDO') return 'warning';
+    if (status === 'ACTIVE') return 'success';
+    if (status === 'FINISHED') return 'default';
+    if (status === 'RESCINDED') return 'warning';
     return 'default';
+};
+
+const contractLabel = (status: string) => {
+    if (status === 'ACTIVE') return 'Ativo';
+    if (status === 'FINISHED') return 'Encerrado';
+    if (status === 'RESCINDED') return 'Rescindido';
+    return status;
 };
 
 const formatAddressFromDescription = (description?: string | null) => {
@@ -51,6 +58,7 @@ export function Tenants() {
     const [properties, setProperties] = useState<PropertyListItemDTO[]>([]);
     const [filteredProperties, setFilteredProperties] = useState<PropertyListItemDTO[]>([]);
     const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
+
     const [propertyDetails, setPropertyDetails] = useState<PropertyDetailsDTO | null>(null);
     const [contractsHistory, setContractsHistory] = useState<ContractHistoryItemDTO[]>([]);
 
@@ -60,11 +68,14 @@ export function Tenants() {
     const [loadingList, setLoadingList] = useState(false);
     const [loadingDetails, setLoadingDetails] = useState(false);
 
+    const [openLinkModal, setOpenLinkModal] = useState(false);
+
     // ---- Carregar lista de imóveis (sidebar) ----
     const fetchProperties = async () => {
         try {
             setLoadingList(true);
             const response = await api.get<PropertyListItemDTO[]>('/properties');
+
             setProperties(response.data);
             setFilteredProperties(response.data);
 
@@ -97,22 +108,26 @@ export function Tenants() {
         }
     };
 
-    // Carrega lista inicial
+    // carrega lista inicial
     useEffect(() => {
         fetchProperties();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // Quando mudar o imóvel selecionado, carrega detalhes + contratos
+    // ao trocar imóvel, fecha modal e carrega detalhes
     useEffect(() => {
+        setOpenLinkModal(false);
+
         if (selectedPropertyId) {
             fetchPropertyDetailsAndContracts(selectedPropertyId);
         } else {
             setPropertyDetails(null);
             setContractsHistory([]);
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedPropertyId]);
 
-    // Filtro por busca + status
+    // filtro por busca + status
     useEffect(() => {
         let result = [...properties];
 
@@ -133,26 +148,18 @@ export function Tenants() {
         setFilteredProperties(result);
     }, [search, statusFilter, properties]);
 
-    // Descobre contrato atual (ATIVO) a partir do histórico
-    const currentContract = contractsHistory.find((c) => c.status === 'ATIVO');
+    // contrato atual (ACTIVE)
+    const currentContract = contractsHistory.find((c) => c.status === 'ACTIVE');
 
     return (
         <Box display="flex" height="100%" gap={2}>
             {/* COLUNA ESQUERDA - LISTA DE IMÓVEIS */}
             <Box width="320px" display="flex" flexDirection="column" gap={2}>
-                <Card
-                    sx={{
-                        p: 2,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        height: '100%',
-                    }}
-                >
+                <Card sx={{ p: 2, display: 'flex', flexDirection: 'column', height: '100%' }}>
                     <Typography variant="h6" fontWeight={600} gutterBottom>
                         Imóveis / Inquilinos
                     </Typography>
 
-                    {/* Busca */}
                     <TextField
                         size="small"
                         placeholder="Buscar por imóvel ou inquilino..."
@@ -162,7 +169,6 @@ export function Tenants() {
                         sx={{ mb: 2 }}
                     />
 
-                    {/* Filtros de status */}
                     <Stack direction="row" spacing={1} mb={2}>
                         <Chip
                             label="Todos"
@@ -186,7 +192,6 @@ export function Tenants() {
 
                     <Divider />
 
-                    {/* Lista */}
                     <Box flex={1} mt={1} sx={{ overflowY: 'auto' }}>
                         {loadingList ? (
                             <Box display="flex" justifyContent="center" mt={4}>
@@ -203,10 +208,7 @@ export function Tenants() {
                                         key={property.id}
                                         selected={property.id === selectedPropertyId}
                                         onClick={() => setSelectedPropertyId(property.id)}
-                                        sx={{
-                                            borderRadius: 1,
-                                            mb: 0.5,
-                                        }}
+                                        sx={{ borderRadius: 1, mb: 0.5 }}
                                     >
                                         <ListItemText
                                             primary={
@@ -242,9 +244,8 @@ export function Tenants() {
                 </Card>
             </Box>
 
-            {/* COLUNA DIREITA - DETALHES DO IMÓVEL + HISTÓRICO */}
+            {/* COLUNA DIREITA */}
             <Box flex={1} display="flex" flexDirection="column" gap={2}>
-                {/* Detalhes do imóvel + inquilino atual */}
                 <Card sx={{ p: 3 }}>
                     {loadingDetails && !propertyDetails ? (
                         <Box display="flex" justifyContent="center" mt={4}>
@@ -256,7 +257,6 @@ export function Tenants() {
                         </Typography>
                     ) : (
                         <>
-                            {/* Cabeçalho do imóvel */}
                             <Box display="flex" justifyContent="space-between" alignItems="flex-start">
                                 <Box>
                                     <Typography variant="h6" fontWeight={600}>
@@ -272,7 +272,7 @@ export function Tenants() {
                                     )}
                                 </Box>
 
-                                <Stack direction="row" spacing={1}>
+                                <Stack direction="row" spacing={1} alignItems="center">
                                     {filteredProperties.find((p) => p.id === propertyDetails.id) && (
                                         <Chip
                                             label={
@@ -286,17 +286,26 @@ export function Tenants() {
                                             )}
                                         />
                                     )}
+
+                                    {/* ✅ botão único e correto */}
+                                    <Button
+                                        variant="contained"
+                                        onClick={() => setOpenLinkModal(true)}
+                                        disabled={!selectedPropertyId}
+                                    >
+                                        Vincular inquilino
+                                    </Button>
                                 </Stack>
                             </Box>
 
                             <Divider sx={{ my: 2 }} />
 
-                            {/* Inquilino atual */}
                             <Grid container spacing={2}>
                                 <Grid item xs={12} md={6}>
                                     <Typography variant="subtitle2" gutterBottom>
                                         Inquilino atual
                                     </Typography>
+
                                     {currentContract ? (
                                         <Box>
                                             <Typography variant="body2">
@@ -369,15 +378,7 @@ export function Tenants() {
                                         </Box>
                                         <Chip
                                             size="small"
-                                            label={
-                                                contract.status === 'ATIVO'
-                                                    ? 'Ativo'
-                                                    : contract.status === 'ENCERRADO'
-                                                        ? 'Encerrado'
-                                                        : contract.status === 'RESCINDIDO'
-                                                            ? 'Rescindido'
-                                                            : contract.status
-                                            }
+                                            label={contractLabel(contract.status)}
                                             color={getContractStatusChipColor(contract.status)}
                                         />
                                     </Box>
@@ -388,6 +389,19 @@ export function Tenants() {
                     )}
                 </Card>
             </Box>
+
+            {/* ✅ MODAL VINCULAR */}
+            {selectedPropertyId && (
+                <LinkContractModal
+                    open={openLinkModal}
+                    onClose={() => setOpenLinkModal(false)}
+                    onSuccess={() => {
+                        setOpenLinkModal(false);
+                        fetchPropertyDetailsAndContracts(selectedPropertyId);
+                    }}
+                    propertyId={selectedPropertyId}
+                />
+            )}
         </Box>
     );
 }

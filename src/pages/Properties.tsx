@@ -2,47 +2,28 @@ import { useState, useEffect } from 'react';
 import {
     Box, Typography, Paper, TextField, InputAdornment, Table,
     TableBody, TableCell, TableContainer, TableHead, TableRow,
-    Chip, IconButton, Tooltip, CircularProgress, Pagination, Button
+    Chip, IconButton, Tooltip, CircularProgress, Pagination,
 } from '@mui/material';
 import {
     Search as SearchIcon,
     Edit as EditIcon,
     Delete as DeleteIcon,
     HomeWork as HomeIcon,
-    Add as AddIcon,
     Visibility as ViewIcon,
     History as HistoryIcon, //  NOVO ÍCONE
 } from '@mui/icons-material';
 import api from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import { PropertyModal } from '../components/popupMaps/PropertyModal';
-
-// Interface completa com os campos novos
-interface Property {
-    id: string;
-    name: string;
-    description: string;
-    clientName: string;
-    matricula: string;
-    propertyType: string;
-    rentValue: string;
-    rentDueDate: string;
-    contractDueDate: string; // <--- Vencimento Contrato
-    iptuStatus: string;      // <--- Status IPTU
-    rentPaymentStatus: string;
-    lat: number;
-    lng: number;
-}
+import type { PropertyListItemDTO } from '../types/Property';
 
 export function Properties() {
     const navigate = useNavigate();
-    const [properties, setProperties] = useState<Property[]>([]);
+    const [properties, setProperties] = useState<PropertyListItemDTO[]>([]);
+    const [editingProperty, setEditingProperty] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
-
-    // --- ESTADOS DO MODAL ---
     const [openModal, setOpenModal] = useState(false);
-    const [editingProperty, setEditingProperty] = useState<Property | null>(null);
 
     useEffect(() => { loadProperties(); }, []);
 
@@ -69,28 +50,31 @@ export function Properties() {
         }
     };
 
-    const handleOpenCreate = () => {
-        setEditingProperty(null);
-        setOpenModal(true);
+    const handleOpenEdit = async (prop: PropertyListItemDTO) => {
+        try {
+            const { data } = await api.get(`/properties/${prop.id}`);
+            setEditingProperty(data); // agora é o details DTO (completo)
+            setOpenModal(true);
+        } catch (e) {
+            console.error(e);
+            alert('Erro ao carregar detalhes do imóvel para edição.');
+        }
     };
 
-    const handleOpenEdit = (prop: Property) => {
-        setEditingProperty(prop);
-        setOpenModal(true);
-    };
 
-    const handleViewOnMap = (prop: Property) => {
+    const handleViewOnMap = (prop: PropertyListItemDTO) => {
         navigate('/maps', { state: { focusId: prop.id, lat: prop.lat, lng: prop.lng } });
     };
 
-    // 👇 NOVO: navegar para tela de Inquilinos / Histórico de contratos
-    const handleViewContractsHistory = (prop: Property) => {
+    const handleViewContractsHistory = (prop: PropertyListItemDTO) => {
         navigate(`/tenants?propertyId=${prop.id}`);
     };
 
+
     const filteredProperties = properties.filter(prop =>
         prop.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (prop.clientName && prop.clientName.toLowerCase().includes(searchTerm.toLowerCase()))
+        (prop.currentTenant && prop.currentTenant.toLowerCase().includes(searchTerm.toLowerCase()))
+
     );
 
     // Chip para Status do Pagamento do Aluguel
@@ -163,19 +147,6 @@ export function Properties() {
                         Gerenciamento completo dos imóveis
                     </Typography>
                 </Box>
-                <Button
-                    variant="contained"
-                    startIcon={<AddIcon />}
-                    onClick={handleOpenCreate}
-                    sx={{
-                        bgcolor: '#6C4FFF',
-                        borderRadius: '8px',
-                        fontWeight: 'bold',
-                        '&:hover': { bgcolor: '#5639cc' },
-                    }}
-                >
-                    Novo Imóvel
-                </Button>
             </Box>
 
             <Paper
@@ -305,39 +276,35 @@ export function Properties() {
                                     <TableCell>
                                         {prop.propertyType || 'Casa'}
                                     </TableCell>
-                                    <TableCell>{prop.clientName || '-'}</TableCell>
+                                    <TableCell>{prop.currentTenant ?? '-'}</TableCell>
                                     <TableCell
                                         sx={{ fontFamily: 'monospace', color: '#555' }}
                                     >
                                         {prop.matricula || '-'}
                                     </TableCell>
 
-                                    <TableCell>
-                                        {prop.rentDueDate
-                                            ? `Dia ${prop.rentDueDate}`
-                                            : '-'}
-                                    </TableCell>
-                                    {/* 👇 DADO NOVO: VENCIMENTO DO CONTRATO */}
-                                    <TableCell>
-                                        {prop.contractDueDate || '-'}
-                                    </TableCell>
+                                    <TableCell>-</TableCell>
+
+                                    {/* VENCIMENTO DO CONTRATO */}
+                                    <TableCell>{prop.currentContractEndDate ?? '-'}</TableCell>
+
 
                                     <TableCell
                                         sx={{ fontWeight: 'bold', color: '#6200EA' }}
                                     >
-                                        {prop.rentValue || '-'}
+                                        {prop.currentRentValue ?? '-'}
                                     </TableCell>
                                     <TableCell>
-                                        {getRentStatusChip(prop.rentPaymentStatus)}
+                                        {getRentStatusChip(prop.currentContractStatus === 'ACTIVE' ? 'emdia' : 'atrasado')}
                                     </TableCell>
 
-                                    {/* 👇 DADO NOVO: STATUS DO IPTU */}
+                                    {/* STATUS DO IPTU */}
                                     <TableCell>
-                                        {getIptuStatusChip(prop.iptuStatus)}
+                                        {getIptuStatusChip(prop.iptuStatus ?? 'Pendente')}
                                     </TableCell>
 
                                     <TableCell align="right">
-                                        {/* 👇 NOVO BOTÃO: HISTÓRICO DE CONTRATOS */}
+                                        {/*HISTÓRICO DE CONTRATOS */}
                                         <Tooltip title="Histórico de contratos">
                                             <IconButton
                                                 size="small"
